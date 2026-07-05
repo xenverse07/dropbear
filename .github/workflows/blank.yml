@@ -1,39 +1,59 @@
-name: Build Universal Dropbear
+name: Build Dropbear Binaries
 
-on: [push, workflow_dispatch]
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
 
 jobs:
   build:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
-        version: ['2016.74', '2017.75', '2018.76', '2019.78', '2020.81', '2022.83', '2024.86']
-        arch: [amd64, arm64] # Mendukung Intel/AMD dan ARM64
+        version: ['2016.74', '2017.75', '2018.76', '2019.78', '2020.81', '2022.83', '2024.86', '2025.87', '2026.88']
 
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3 # Penting untuk kompilasi silang ARM64
+      - name: Install Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential zlib1g-dev wget
 
       - name: Compile Dropbear
         run: |
-          # Menggunakan docker untuk mengisolasi environment kompilasi sesuai arsitektur
-          docker run --rm -v ${{ github.workspace }}:/build \
-          --platform linux/${{ matrix.arch }} \
-          debian:11-slim bash -c "
-            apt-get update && apt-get install -y build-essential zlib1g-dev wget
-            wget https://matt.ucc.asn.au/dropbear/releases/dropbear-${{ matrix.version }}.tar.bz2
-            tar -xjf dropbear-${{ matrix.version }}.tar.bz2
-            cd dropbear-${{ matrix.version }}
-            ./configure LDFLAGS=-static
-            make
-            cp dropbear /build/dropbear-${{ matrix.version }}-${{ matrix.arch }}
-          "
+          wget https://matt.ucc.asn.au/dropbear/releases/dropbear-${{ matrix.version }}.tar.bz2
+          tar -xjf dropbear-${{ matrix.version }}.tar.bz2
+          cd dropbear-${{ matrix.version }}
+          ./configure LDFLAGS=-static
+          make
+          mv dropbear ../dropbear-${{ matrix.version }}-amd64
 
       - name: Upload Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: dropbear-${{ matrix.version }}-${{ matrix.arch }}
-          path: dropbear-${{ matrix.version }}-${{ matrix.arch }}
+          name: dropbear-${{ matrix.version }}-amd64
+          path: dropbear-${{ matrix.version }}-amd64
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - name: Download artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: artifacts/**/*
+          body: "Auto-compiled Dropbear binaries from 2016 to 2026."
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
