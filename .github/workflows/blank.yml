@@ -1,0 +1,39 @@
+name: Build Universal Dropbear
+
+on: [push, workflow_dispatch]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        version: ['2016.74', '2017.75', '2018.76', '2019.78', '2020.81', '2022.83', '2024.86']
+        arch: [amd64, arm64] # Mendukung Intel/AMD dan ARM64
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3 # Penting untuk kompilasi silang ARM64
+
+      - name: Compile Dropbear
+        run: |
+          # Menggunakan docker untuk mengisolasi environment kompilasi sesuai arsitektur
+          docker run --rm -v ${{ github.workspace }}:/build \
+          --platform linux/${{ matrix.arch }} \
+          debian:11-slim bash -c "
+            apt-get update && apt-get install -y build-essential zlib1g-dev wget
+            wget https://matt.ucc.asn.au/dropbear/releases/dropbear-${{ matrix.version }}.tar.bz2
+            tar -xjf dropbear-${{ matrix.version }}.tar.bz2
+            cd dropbear-${{ matrix.version }}
+            ./configure LDFLAGS=-static
+            make
+            cp dropbear /build/dropbear-${{ matrix.version }}-${{ matrix.arch }}
+          "
+
+      - name: Upload Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dropbear-${{ matrix.version }}-${{ matrix.arch }}
+          path: dropbear-${{ matrix.version }}-${{ matrix.arch }}
