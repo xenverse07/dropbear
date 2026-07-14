@@ -1,0 +1,47 @@
+name: Build and Release BadVPN UDPGW
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: 'Nama Tag Rilis (contoh: v1.0.0)'
+        required: true
+        default: 'v1.0.0'
+
+permissions:
+  contents: write # Akses wajib agar GitHub Actions dapat membuat rilis
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest # Lingkungan ini sudah menggunakan arsitektur x86_64
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake make gcc git
+
+      - name: Clone and Compile BadVPN
+        run: |
+          git clone https://github.com/ambrop72/badvpn.git
+          cd badvpn
+          mkdir build
+          cd build
+          cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1
+          make
+          
+          # Pindahkan binary hasil kompilasi ke direktori workspace
+          cp udpgw/badvpn-udpgw ${{ github.workspace }}/badvpn-udpgw
+
+      - name: Create Release and Upload Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag_name }}
+          name: "BadVPN UDPGW - ${{ github.event.inputs.tag_name }}"
+          body: "Pre-compiled badvpn-udpgw binary for x86_64 architecture."
+          files: badvpn-udpgw
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
